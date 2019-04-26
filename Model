@@ -1,0 +1,140 @@
+#A pantropical pollination model
+
+#########################    POTENTIAL POLLINATION   ##############################
+import arcpy
+from arcpy import env
+from arcpy.sa import *
+env.workspace = "E:\"
+
+###CORRIDORS
+#Inputs: GlobCover land cover map, FAO’s railways, rivers and roads maps
+#Seminatural habitat: Post-flooding or irrigated croplands (or aquatic), 11; Rainfed croplands,14; Mosaic cropland (50-70%) / vegetation (grassland/shrubland/forest) (20-50%), 20.
+arcpy.gp.Reclassify_sa("lan_cov_pj", "VALUE", "11 1;14 1;20 1;30 230 0", "E:/seminat", "DATA"
+#RRR: merge railways, rivers and roads (RRR) and rasterize
+arcpy.Merge_management(inputs="rivers;roads;railroads", output="E:/ RRR.shp")
+arcpy.FeatureToRaster_conversion(in_features="RRR", field="ID", out_raster="E:/ RRR", cell_size="318.715146950206")
+arcpy.gp.Reclassify_sa("RRR", "Value", "0 170698 1", "E:/ RRR1", "DATA")
+#Intersect RRR + seminatural habitats 
+arcpy.gp.RasterCalculator_sa("RRR1" + "seminat", "E:/RRR_SN")
+arcpy.gp.Reclassify_sa("RRR_SN ", "Value", "2 1;NODATA 0", "E:/corridors", "DATA")
+#Output: corridors
+
+###NESTING SUITABILITY BY LAND COVER
+#Inputs: Globcover land cover map, corridors
+#Globcover ID values replaced with nesting suitability values 
+arcpy.gp.Reclassify_sa("lan_cov_pj", "VALUE", "11 40;14 20;20 70;30 75;40 80;50 80;60 40;70 80;90 40;100 80;110 90;120 90;130 90;140 40;150 70;160 0;170 0;180 0;190 30;200 0;210 0;220 0;230 NODATA", "E:/Nj_100", "DATA")
+arcpy.gp.RasterCalculator_sa(Float("Nj_100") /100, "E:/Nj")
+#Nj & corridors: pixel value for seminatural habitat is replaced by 0.8 if there are RRR
+arcpy.gp.RasterCalculator_sa("Con("corridors">0, 0.8,"Nj" )", "E:/Nj_mod")
+#Output: Nj_mod
+
+###SLOPE & NESTING SITES
+#Inputs: Digital Elevation Model
+arcpy.gp.Slope_sa("DEM", "E:/Slope", "DEGREE", "1")
+#Output: Slope
+arcpy.gp.RasterCalculator_sa("Con("Slope",0.6,1,"VALUE > 30")", "E:/Slope_N")
+#Output: Slope_N
+
+###LIKELIHOOD OF MOVEMENT 
+#Inputs: Nj_mod
+arcpy.gp.FocalStatistics_sa("Nj_mod", "E:/Nj_mean", "Annulus 1 1 CELL", "MEAN", "DATA")
+arcpy.gp.RasterCalculator_sa("Nj_mean" / "Nj_mod"), "E:/Mov_1")
+arcpy.gp.RasterCalculator_sa("Mov_1">1,1, "Mov_1"), "E:/Mov")
+#Output: Mov
+
+###POTENTIAL NESTING SITES
+arcpy.gp.RasterCalculator_sa("Nj_mod"*"Slope_N"*"Mov","E:/NS")
+#Output: NS
+
+###FLORAL RESOURCES BY LAND COVER
+#Inputs: Globcover land cover map, Corridors
+#Globcover ID values replaced with nesting suitability values 
+arcpy.gp.Reclassify_sa("lan_cov_pj", "VALUE", "11 40;14 20;20 75;30 70;40 90;50 90;60 45;70 30;90 15;100 60;110 90;120 90;130 100;140 40;150 35;160 0;170 0;180 0;190 30;200 0;210 0;220 0;230 NODATA", "E:/Nj_100", "DATA")
+arcpy.gp.RasterCalculator_sa(Float("Fj_100") /100, "E:/Fj")
+#Fj & corridors: pixel value for seminatural habitat is replaced by 0.8 if there are RRR
+arcpy.gp.RasterCalculator_sa("Con("corridors">0, 0.8,"Fj" )", "E:/Fj_mod")
+#Output: Fj_mod
+
+###SLOPE & FORAGING SITES
+#Inputs: Slope
+arcpy.gp.RasterCalculator_sa("Con("Slope",0.2,1,"VALUE > 0")", "E:/Slope_F")
+#Output: Slope_F
+arcpy.gp.RasterCalculator_sa("Fj_mod"*"Slope_F","E:/Fj_sl")
+#Output: Fj_sl
+
+###POTENTIAL FORAGING SITES
+#Inputs: Fj_sl, weight.txt (Kernel weight matrix)
+#Mean of foraging distance weight applied to Fj_sl
+arcpy.gp.FocalStatistics_sa("Fj_sl", "E:/FR", "Weight E:\weight.txt", "MEAN", "DATA")
+#Output: FR
+
+###BARRIERS
+#Inputs: RRR.shp
+arcpy.gp.LineDensity_sa("Barr_p", "NONE", "E:/1PHDRight/Pol_code/road_den", "318.715146950206", "318.715146950206", "SQUARE_MAP_UNITS")
+arcpy.gp.RasterCalculator_sa((1- "bar_den") /100, "E:/barriers")
+#Output: barriers
+
+###ACTIVITY 
+#Inputs: DEM, mean annual cloud cover (CC), hours of daylight per year for each latitude degree (H)
+#Clip DEM every 1 latitude degree 
+arcpy.gp.ExtractByRectangle_sa("DEM", "-180 34 180 35", "E:/34N", "INSIDE") 
+arcpy.gp.ExtractByRectangle_sa("DEM", "-180 33 180 34", "E:/33N", "INSIDE")
+# 
+#From 35 to -35 latitude degrees 
+#
+arcpy.gp.ExtractByRectangle_sa("DEM", "-180 -33 180 -34", "E:/34S", "INSIDE")
+arcpy.gp.ExtractByRectangle_sa("DEM", "-180 -34 180 -35", "E:/35S", "INSIDE")
+
+#Solar Radiation (WH/m^2) for clear sky conditions
+#AreaSolarRadiation(inRaster, latitude, skySize, timeConfig, dayInterval, hourInterval, "NOINTERVAL", zFactor, "FROM_DEM", calcDirections, zenithDivisions, azimuthDivisions, "UNIFORM_SKY",diffuseProp, transmittivity)
+#Example 34N
+arcpy.gp.AreaSolarRadiation_sa("1e", "E:/34N", "34.5", "200", "WholeYear   2015", "14", "1", "NOINTERVAL", "1", "FROM_DEM", "32", "8", "8", "UNIFORM_SKY", "0.2", "0.5")
+#Solar Radiation (W/m^2) for clear sky conditions divided by the hours of daylight per year (excel spreadsheet for calculation available in supplementary materials
+arcpy.gp.RasterCalculator_sa("34N"/ 4432.22128, "E:/34Nsi")
+# Mosaic solar radiation outputs
+#Inputs: all outputs of solar radiation per latitude degree 
+arcpy.MosaicToNewRaster_management(input_rasters="34Nsi;33Nsi;32Nsi…;32Ssi,33Ssi,34Ssi", output_location="E:/", raster_dataset_name_with_extension="SI", coordinate_system_for_the_raster="", pixel_type="8_BIT_SIGNED", cellsize="", number_of_bands="1", mosaic_method="MEAN", mosaic_colormap_mode="FIRST")
+#Output: SI
+
+#Cloud cover correction
+#Inputs: SI; mean annual cloud cover (CC)
+arcpy.gp.RasterCalculator_sa(("SI")*(1-0.75*(Power("CC",3.4))), "E:/R")
+#Output: R
+#Temperature of black globe
+#Inputs: R; mean annual temperature
+arcpy.gp.RasterCalculator_sa((-0.62+(1.027*("meanT")+0.006*("R")), "E:/Tbg")
+#Activity coefficient 
+arcpy.gp.RasterCalculator_sa((-39.3+4.01*("Tbg")), "E:/Act100")
+#Adjust activity coefficient 0 to 1 
+arcpy.gp.RasterCalculator_sa("Act100"<0,0,"Act100", "E:/Act0")
+arcpy.gp.RasterCalculator_sa("Act0">100,100, "Act0"), "E:/Act_int")
+arcpy.gp.RasterCalculator_sa(Float("Act_int")/100, "E:/Act")
+#Output: Act
+
+###POTENTIAL POLLINATION
+#Inputs: NS, FR, barriers, Act
+arcpy.gp.RasterCalculator_sa("NS"*"RFR"*"Act"*"barriers", "E:/Pot_pol")
+#Output: Pot_pol
+
+
+##############################REALISED POLLINATION################################
+###POLLINATOR DEPENDENT CROPS
+#Inputs: other_crops
+#Other crops category of the Geographic distribution of major crops across the World map (source: https://nelson.wisc.edu/sage/data-and-models/global-land-use/grid.php). Resolution: 0.5 degrees. Values range 0 to 1 to depict percentage of ‘other crops’ in the pixel; all values >0.01 (~6000km^2) were considered occurrence of pollinator-dependent crop. 
+arcpy.gp.RasterCalculator_sa(Int("Con("other_crops">0.01,1,SetNull("other_crops","other_crops","Value<1")))", "E:/pol_crops")
+arcpy.RasterToPolygon_conversion(in_raster=" pol_crops ", out_polygon_features="E:/ pol_crops.shp", simplify="SIMPLIFY", raster_field="VALUE")
+arcpy.Buffer_analysis(in_features="pol_crops", out_feature_class="E:/ pol_crops_buf.shp", buffer_distance_or_field="1500 Meters", line_side="FULL", line_end_type="ROUND", dissolve_option="ALL", dissolve_field="", method="PLANAR")
+#Output=pol_crops_buf
+
+###REALISED FORAGING SITES
+#Clip Potential foraging sites (Fj_sl) with crops + buffer
+#Inputs: Fj_sl, other_crops_buf
+arcpy.gp.ExtractByMask_sa("Fj_sl", "pol_crops_buf", "E:/RFj_sl")
+#Calculate realised foraging distance 
+#Inputs: RFj_sl, weight.txt 
+arcpy.gp.FocalStatistics_sa("RFj_sl", "E:/FS", "Weight E:\weight.txt", "MEAN", "DATA")
+
+###REALISED POLLINATION
+#Inputs: NS, RFR, Act, barriers
+arcpy.gp.RasterCalculator_sa("NS"*"RFR"*"barriers"*"Act", "E:/Real_pol")
+#Output: Real_pol
