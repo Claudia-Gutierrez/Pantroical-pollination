@@ -28,11 +28,11 @@ arcpy.gp.RasterCalculator_sa(Float("Nj_100") /100, "E:/Nj")
 arcpy.gp.RasterCalculator_sa("Con("corridors">0, 0.8,"Nj" )", "E:/Nj_mod")
 #Output: Nj_mod
 
-###SLOPE & NESTING SITES
+###SLOPE & NESTING SITES #Removed for model version 2.0 
 #Inputs: Digital Elevation Model
-arcpy.gp.Slope_sa("DEM", "E:/Slope", "DEGREE", "1")
+#arcpy.gp.Slope_sa("DEM", "E:/Slope", "DEGREE", "1")
 #Output: Slope
-arcpy.gp.RasterCalculator_sa("Con("Slope",0.6,1,"VALUE > 30")", "E:/Slope_N")
+#arcpy.gp.RasterCalculator_sa("Con("Slope",0.6,1,"VALUE > 30")", "E:/Slope_N")
 #Output: Slope_N
 
 ###LIKELIHOOD OF MOVEMENT 
@@ -42,8 +42,8 @@ arcpy.gp.RasterCalculator_sa("Nj_mean" / "Nj_mod"), "E:/Mov_1")
 arcpy.gp.RasterCalculator_sa("Mov_1">1,1, "Mov_1"), "E:/Mov")
 #Output: Mov
 
-###POTENTIAL NESTING SITES
-arcpy.gp.RasterCalculator_sa("Nj_mod"*"Slope_N"*"Mov","E:/NS")
+###POTENTIAL NESTING SITES 
+arcpy.gp.RasterCalculator_sa("Nj_mod"*"Mov","E:/NS")
 #Output: NS
 
 ###FLORAL RESOURCES BY LAND COVER
@@ -55,15 +55,15 @@ arcpy.gp.RasterCalculator_sa(Float("Fj_100") /100, "E:/Fj")
 arcpy.gp.RasterCalculator_sa("Con("corridors">0, 0.8,"Fj" )", "E:/Fj_mod")
 #Output: Fj_mod
 
-###SLOPE & FORAGING SITES
+###SLOPE & FORAGING SITES #Removed for model version 2.0 
 #Inputs: Slope
-arcpy.gp.RasterCalculator_sa("Con("Slope",0.2,1,"VALUE > 0")", "E:/Slope_F")
+#arcpy.gp.RasterCalculator_sa("Con("Slope",0.2,1,"VALUE > 0")", "E:/Slope_F")
 #Output: Slope_F
-arcpy.gp.RasterCalculator_sa("Fj_mod"*"Slope_F","E:/Fj_sl")
+#arcpy.gp.RasterCalculator_sa("Fj_mod"*"Slope_F","E:/Fj_sl")
 #Output: Fj_sl
 
 ###POTENTIAL FORAGING SITES
-#Inputs: Fj_sl, weight.txt (Kernel weight matrix)
+#Inputs: Fj_mod, weight.txt (Kernel weight matrix)
 #Mean of foraging distance weight applied to Fj_sl
 arcpy.gp.FocalStatistics_sa("Fj_sl", "E:/FR", "Weight E:\weight.txt", "MEAN", "DATA")
 #Output: FR
